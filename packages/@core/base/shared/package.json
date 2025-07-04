@@ -81,10 +81,13 @@
   "dependencies": {
     "@ctrl/tinycolor": "catalog:",
     "@tanstack/vue-store": "catalog:",
+    "@types/crypto-js": "^4.2.2",
     "@vue/shared": "catalog:",
     "clsx": "catalog:",
+    "crypto-js": "^4.2.0",
     "dayjs": "catalog:",
     "defu": "catalog:",
+    "jsencrypt": "^3.3.2",
     "lodash.clonedeep": "catalog:",
     "lodash.get": "catalog:",
     "lodash.isequal": "catalog:",

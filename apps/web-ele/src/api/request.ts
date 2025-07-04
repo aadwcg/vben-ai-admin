@@ -1,17 +1,30 @@
 /**
  * 该文件可自行根据业务逻辑进行调整
  */
-import type { RequestClientOptions } from '@vben/request';
 
+import type { HttpResponse } from '@vben/request';
+
+import { alert } from '@vben/common-ui';
 import { useAppConfig } from '@vben/hooks';
+import { $t } from '@vben/locales';
 import { preferences } from '@vben/preferences';
 import {
   authenticateResponseInterceptor,
-  defaultResponseInterceptor,
   errorMessageResponseInterceptor,
   RequestClient,
+  stringify,
 } from '@vben/request';
 import { useAccessStore } from '@vben/stores';
+import {
+  decryptBase64,
+  decryptWithAes,
+  encryptBase64,
+  encryptWithAes,
+  generateAesKey,
+  isEmpty,
+  isNull,
+} from '@vben/utils';
+import * as encryptUtil from '@vben/utils';
 
 import { ElMessage } from 'element-plus';
 
@@ -19,12 +32,25 @@ import { useAuthStore } from '#/store';
 
 import { refreshTokenApi } from './core';
 
-const { apiURL } = useAppConfig(import.meta.env, import.meta.env.PROD);
+const { apiURL, clientId, enableEncrypt, rsaPrivateKey, rsaPublicKey } =
+  useAppConfig(import.meta.env, import.meta.env.PROD);
 
-function createRequestClient(baseURL: string, options?: RequestClientOptions) {
+/**
+ * 是否已经处在登出过程中了 一个标志位
+ * 主要是防止一个页面会请求多个api 都401 会导致登出执行多次
+ */
+let isLogoutProcessing = false;
+
+function createRequestClient(baseURL: string) {
   const client = new RequestClient({
-    ...options,
+    // 后端地址
     baseURL,
+    // 消息提示类型
+    errorMessageMode: 'message',
+    // 是否返回原生响应 比如：需要获取响应头时使用该属性
+    isReturnNativeResponse: false,
+    // 需要对返回数据进行处理
+    isTransformResponse: true,
   });
 
   /**
@@ -62,23 +88,183 @@ function createRequestClient(baseURL: string, options?: RequestClientOptions) {
 
   // 请求头处理
   client.addRequestInterceptor({
-    fulfilled: async (config) => {
+    fulfilled: (config) => {
       const accessStore = useAccessStore();
-
+      // 添加token
       config.headers.Authorization = formatToken(accessStore.accessToken);
-      config.headers['Accept-Language'] = preferences.app.locale;
+      /**
+       * locale跟后台不一致 需要转换
+       */
+      const language = preferences.app.locale.replace('-', '_');
+      config.headers['Accept-Language'] = language;
+      config.headers['Content-Language'] = language;
+      // 添加全局clientId
+      config.headers.clientId = clientId;
+
+      /**
+       * 格式化get/delete参数
+       * 如果包含自定义的paramsSerializer则不走此逻辑
+       */
+      if (
+        ['DELETE', 'GET'].includes(config.method?.toUpperCase() || '') &&
+        config.params &&
+        !config.paramsSerializer
+      ) {
+        /**
+         * 1. 格式化参数 微服务在传递区间时间选择(后端的params Map类型参数)需要格式化key 否则接收不到
+         * 2. 数组参数需要格式化 后端才能正常接收 会变成arr=1&arr=2&arr=3的格式来接收
+         */
+        config.paramsSerializer = (params) =>
+          stringify(params, { arrayFormat: 'repeat' });
+      }
+
+      const { encrypt } = config;
+      // 全局开启请求加密功能 && 该请求开启 && 是post/put请求
+      if (
+        enableEncrypt &&
+        encrypt &&
+        ['POST', 'PUT'].includes(config.method?.toUpperCase() || '')
+      ) {
+        const aesKey = generateAesKey();
+        config.headers['encrypt-key'] = encryptUtil.encrypt(
+          encryptBase64(aesKey),
+          rsaPublicKey,
+        );
+
+        config.data =
+          typeof config.data === 'object'
+            ? encryptWithAes(JSON.stringify(config.data), aesKey)
+            : encryptWithAes(config.data, aesKey);
+      }
       return config;
     },
   });
 
-  // 处理返回的响应数据格式
+  // 通用的错误处理, 如果没有进入上面的错误处理逻辑，就会进入这里
+  // 主要处理http状态码不为200(如网络异常/离线)的情况 必须放在在下面的响应拦截器之前
   client.addResponseInterceptor(
-    defaultResponseInterceptor({
-      codeField: 'code',
-      dataField: 'data',
-      successCode: 0,
-    }),
+    errorMessageResponseInterceptor((msg: string) => ElMessage.error(msg)),
   );
+  client.addResponseInterceptor<HttpResponse>({
+    fulfilled: async (response) => {
+      const encryptKey = (response.headers ?? {})['encrypt-key'];
+      if (encryptKey) {
+        /** RSA私钥解密 拿到解密秘钥的base64 */
+        const base64Str = encryptUtil.decrypt(encryptKey, rsaPrivateKey);
+        /** base64 解码 得到请求头的 AES 秘钥 */
+        const aesSecret = decryptBase64(base64Str.toString());
+        /** 使用aesKey解密 responseData */
+        const decryptData = decryptWithAes(
+          response.data as unknown as string,
+          aesSecret,
+        );
+        /** 赋值 需要转为对象 */
+        response.data = JSON.parse(decryptData);
+      }
+
+      const { isReturnNativeResponse, isTransformResponse } = response.config;
+      // 是否返回原生响应 比如：需要获取响应时使用该属性
+      if (isReturnNativeResponse) {
+        return response;
+      }
+      // 不进行任何处理，直接返回
+      // 用于页面代码可能需要直接获取code，data，message这些信息时开启
+      if (!isTransformResponse) {
+        /**
+         * 需要判断下载二进制的情况 正常是返回二进制 报错会返回json
+         * 当type为blob且content-type为application/json时 则判断已经下载出错
+         */
+        if (
+          response.config.responseType === 'blob' &&
+          response.headers['content-type']?.includes?.('application/json')
+        ) {
+          // 这时候的data为blob类型
+          const blob = response.data as unknown as Blob;
+          // 拿到字符串转json对象
+          response.data = JSON.parse(await blob.text());
+          // 然后按正常逻辑执行下面的代码(判断业务状态码)
+        } else {
+          // 其他情况 直接返回
+          return response.data;
+        }
+      }
+
+      const axiosResponseData = response.data;
+      if (!axiosResponseData) {
+        throw new Error($t('http.apiRequestFailed'));
+      }
+
+      // 后端并没有采用严格的{code, msg, data}模式
+      const { code, data, msg, ...other } = axiosResponseData;
+
+      // 业务状态码为200则请求成功
+      const hasSuccess = Reflect.has(axiosResponseData, 'code') && code === 200;
+      if (hasSuccess) {
+        let successMsg = msg;
+
+        if (isNull(successMsg) || isEmpty(successMsg)) {
+          successMsg = $t(`http.operationSuccess`);
+        }
+
+        if (response.config.successMessageMode === 'modal') {
+          alert({
+            content: successMsg,
+            title: $t('http.successTip'),
+            icon: 'success',
+          });
+        } else if (response.config.successMessageMode === 'message') {
+          ElMessage.success(successMsg);
+        }
+        // 分页情况下为code msg rows total 并没有data字段
+        // 如果有data 直接返回data 没有data将剩余参数(...other)封装为data返回
+        // 需要考虑data为null的情况(比如查询为空) 所以这里直接判断undefined
+        if (data !== undefined) {
+          return data;
+        }
+        // 没有data 将其他参数包装为data
+        return other;
+      }
+      // 在此处根据自己项目的实际情况对不同的code执行不同的操作
+      // 如果不希望中断当前请求，请return数据，否则直接抛出异常即可
+      let timeoutMsg = '';
+      switch (code) {
+        case 401: {
+          // 已经在登出过程中 不再执行
+          if (isLogoutProcessing) {
+            return;
+          }
+          isLogoutProcessing = true;
+          const _msg = $t('http.loginTimeout');
+          const userStore = useAuthStore();
+          userStore.logout().finally(() => {
+            ElMessage.error(_msg);
+            isLogoutProcessing = false;
+          });
+          // 不再执行下面逻辑
+          return;
+        }
+        default: {
+          if (msg) {
+            timeoutMsg = msg;
+          }
+        }
+      }
+
+      // errorMessageMode='modal'的时候会显示modal错误弹窗，而不是消息提示，用于一些比较重要的错误
+      // errorMessageMode='none' 一般是调用时明确表示不希望自动弹出错误提示
+      if (response.config.errorMessageMode === 'modal') {
+        alert({
+          content: timeoutMsg,
+          title: $t('http.errorTip'),
+          icon: 'error',
+        });
+      } else if (response.config.errorMessageMode === 'message') {
+        ElMessage.error(timeoutMsg);
+      }
+
+      throw new Error(timeoutMsg || $t('http.apiRequestFailed'));
+    },
+  });
 
   // token过期的处理
   client.addResponseInterceptor(
@@ -90,24 +276,9 @@ function createRequestClient(baseURL: string, options?: RequestClientOptions) {
       formatToken,
     }),
   );
-
-  // 通用的错误处理,如果没有进入上面的错误处理逻辑，就会进入这里
-  client.addResponseInterceptor(
-    errorMessageResponseInterceptor((msg: string, error) => {
-      // 这里可以根据业务进行定制,你可以拿到 error 内的信息进行定制化处理，根据不同的 code 做不同的提示，而不是直接使用 message.error 提示 msg
-      // 当前mock接口返回的错误字段是 error 或者 message
-      const responseData = error?.response?.data ?? {};
-      const errorMessage = responseData?.error ?? responseData?.message ?? '';
-      // 如果没有错误信息，则会根据状态码进行提示
-      ElMessage.error(errorMessage || msg);
-    }),
-  );
-
   return client;
 }
 
-export const requestClient = createRequestClient(apiURL, {
-  responseReturn: 'data',
-});
+export const requestClient = createRequestClient(apiURL);
 
 export const baseRequestClient = new RequestClient({ baseURL: apiURL });
