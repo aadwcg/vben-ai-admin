@@ -20,6 +20,15 @@ export interface VbenAdminProAppConfigRaw {
   VITE_GLOB_RSA_PUBLIC_KEY: string;
   // 是否开启sse  注意从配置文件获取的类型为string
   VITE_GLOB_SSE_ENABLE: string;
+  VITE_GLOB_AUTH_DINGDING_CLIENT_ID: string;
+  VITE_GLOB_AUTH_DINGDING_CORP_ID: string;
+}
+
+interface AuthConfig {
+  dingding?: {
+    clientId: string;
+    corpId: string;
+  };
 }
 
 export interface ApplicationConfig {
@@ -35,6 +44,7 @@ export interface ApplicationConfig {
   rsaPublicKey: string;
   // 是否开启sse
   sseEnable: boolean;
+  auth: AuthConfig;
 }
 
 declare global {

@@ -22,19 +22,26 @@ export function useAppConfig(
     VITE_GLOB_RSA_PRIVATE_KEY,
     VITE_GLOB_RSA_PUBLIC_KEY,
     VITE_GLOB_SSE_ENABLE,
+    VITE_GLOB_AUTH_DINGDING_CORP_ID,
+    VITE_GLOB_AUTH_DINGDING_CLIENT_ID,
   } = config;
 
-  return {
-    // 后端地址
+  const applicationConfig: ApplicationConfig = {
     apiURL: VITE_GLOB_API_URL,
-    // 客户端key
     clientId: VITE_GLOB_APP_CLIENT_ID,
     enableEncrypt: VITE_GLOB_ENABLE_ENCRYPT === 'true',
-    // RSA私钥
     rsaPrivateKey: VITE_GLOB_RSA_PRIVATE_KEY,
-    // RSA公钥
     rsaPublicKey: VITE_GLOB_RSA_PUBLIC_KEY,
-    // 是否开启sse
     sseEnable: VITE_GLOB_SSE_ENABLE === 'true',
+    auth: {},
   };
+
+  if (VITE_GLOB_AUTH_DINGDING_CORP_ID && VITE_GLOB_AUTH_DINGDING_CLIENT_ID) {
+    applicationConfig.auth.dingding = {
+      clientId: VITE_GLOB_AUTH_DINGDING_CLIENT_ID,
+      corpId: VITE_GLOB_AUTH_DINGDING_CORP_ID,
+    };
+  }
+
+  return applicationConfig;
 }

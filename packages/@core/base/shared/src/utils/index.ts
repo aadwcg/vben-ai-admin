@@ -9,6 +9,7 @@ export * from './jsencrypt';
 export * from './letter';
 export * from './merge';
 export * from './nprogress';
+export * from './resources';
 export * from './state-handler';
 export * from './to';
 export * from './tree';
