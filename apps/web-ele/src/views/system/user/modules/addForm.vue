@@ -1,58 +1,41 @@
 <script lang="ts" setup>
-import type { Role } from '#/api/system/user/model';
-
-import { h, ref } from 'vue';
+import { ref } from 'vue';
 
 import { useVbenModal } from '@vben/common-ui';
-
-import { ElTag } from 'element-plus';
+import { cloneDeep } from '@vben/utils';
 
 import { useVbenForm } from '#/adapter/form';
-import { findUserInfo } from '#/api/system/user';
+import { findUserInfo, userAdd } from '#/api/system/user';
 
-import { useFormSchema } from '../data';
+import { formSchamas } from '../data';
 
+const emit = defineEmits(['success']);
 const isUpdate = ref(false);
-
-/**
- * authScopeOptions user也会用到
- */
-const authScopeOptions = [
-  { color: 'green', label: '全部数据权限', value: '1' },
-  { color: 'default', label: '自定数据权限', value: '2' },
-  { color: 'orange', label: '本部门数据权限', value: '3' },
-  { color: 'cyan', label: '本部门及以下数据权限', value: '4' },
-  { color: 'error', label: '仅本人数据权限', value: '5' },
-  { color: 'default', label: '部门及以下或本人数据权限', value: '6' },
-];
-
-/**
- * 生成角色的自定义label
- * 也可以用option插槽来做
- * renderComponentContent: () => ({
-    option: ({value, label, [disabled, key, title]}) => '',
-  }),
- */
-function genRoleOptionlabel(role: Role) {
-  const found = authScopeOptions.find((item) => item.value === role.dataScope);
-  if (!found) {
-    return role.roleName;
-  }
-  return h('div', { class: 'flex items-center gap-[6px]' }, [
-    h('span', null, role.roleName),
-    h(ElTag, { color: found.color }, () => found.label),
-  ]);
-}
-const onSubmit = () => {};
-
 const [Form, formApi] = useVbenForm({
-  handleSubmit: onSubmit,
-  schema: useFormSchema(),
+  schema: formSchamas(),
+  // handleSubmit: onSubmit,
   showDefaultActions: false,
 });
-
 const [Modal, modalApi] = useVbenModal({
   fullscreenButton: false,
+  onCancel() {
+    modalApi.close();
+  },
+  onConfirm: async () => {
+    const { valid } = await formApi.validate();
+    if (!valid) {
+      return;
+    }
+    modalApi.setState({ loading: true, confirmLoading: true });
+    try {
+      const data = cloneDeep(await formApi.getValues());
+      await userAdd(data);
+      emit('success');
+      await modalApi.close();
+    } finally {
+      modalApi.setState({ loading: false, confirmLoading: false });
+    }
+  },
   async onOpenChange(isOpen) {
     if (!isOpen) {
       // 关闭时清空岗位选项
@@ -95,7 +78,7 @@ const [Modal, modalApi] = useVbenModal({
       value: item.postId,
     }));
     const roleOptions = (roles ?? []).map((item) => ({
-      label: genRoleOptionlabel(item),
+      label: item.roleName,
       title: item.roleName, // 用于显示回填
       value: item.roleId,
     }));
@@ -129,7 +112,7 @@ const [Modal, modalApi] = useVbenModal({
 });
 </script>
 <template>
-  <Modal>
+  <Modal title="新增用户">
     <Form />
   </Modal>
 </template>

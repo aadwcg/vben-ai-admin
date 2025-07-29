@@ -1,4 +1,4 @@
-import type { FormSchemaGetter, VbenFormSchema } from '#/adapter/form';
+import type { FormSchemaGetter } from '#/adapter/form';
 import type { VxeTableGridOptions } from '#/adapter/vxe-table';
 
 import { DictEnum } from '@vben/constants';
@@ -6,76 +6,72 @@ import { DictEnum } from '@vben/constants';
 import { z } from '#/adapter/form';
 import { getDictOptions } from '#/utils/dict';
 
-export function useColumns(): VxeTableGridOptions['columns'] {
-  return [
-    { type: 'checkbox', width: 60 },
-    {
-      field: 'userName',
-      title: '用户名称',
+export const girdColumns: VxeTableGridOptions['columns'] = [
+  { type: 'checkbox', width: 60 },
+  {
+    field: 'userName',
+    title: '用户名称',
+  },
+  {
+    field: 'userBalance',
+    title: '用户余额',
+  },
+  {
+    field: 'avatar',
+    title: '头像',
+    slots: { default: 'avatar' },
+    width: 80,
+  },
+  {
+    field: 'createTime',
+    title: '创建时间',
+  },
+  {
+    field: 'loginDate',
+    title: '最后登录时间',
+  },
+  {
+    field: 'status',
+    title: '状态',
+    // slots: { default: 'status' },
+  },
+  {
+    field: 'action',
+    fixed: 'right',
+    // slots: { default: 'action' },
+    title: '操作',
+    width: 180,
+  },
+];
+export const searchFormSchemas: FormSchemaGetter = () => [
+  {
+    component: 'Input',
+    fieldName: 'userName',
+    label: '用户账号',
+  },
+  {
+    component: 'Input',
+    fieldName: 'nickName',
+    label: '用户昵称',
+  },
+  {
+    component: 'Select',
+    componentProps: {
+      options: getDictOptions(DictEnum.SYS_NORMAL_DISABLE),
     },
-    {
-      field: 'userBalance',
-      title: '用户余额',
+    fieldName: 'status',
+    label: '用户状态',
+  },
+  {
+    component: 'DatePicker',
+    componentProps: {
+      type: 'daterange',
     },
-    {
-      field: 'avatar',
-      title: '头像',
-      slots: { default: 'avatar' },
-      width: 80,
-    },
-    {
-      field: 'createTime',
-      title: '创建时间',
-    },
-    {
-      field: 'loginDate',
-      title: '最后登录时间',
-    },
-    {
-      field: 'status',
-      title: '状态',
-      // slots: { default: 'status' },
-    },
-    {
-      field: 'action',
-      fixed: 'right',
-      // slots: { default: 'action' },
-      title: '操作',
-      width: 180,
-    },
-  ];
-}
-export function useGridFormSchema(): VbenFormSchema[] {
-  return [
-    {
-      component: 'Input',
-      fieldName: 'userName',
-      label: '用户账号',
-    },
-    {
-      component: 'Input',
-      fieldName: 'nickName',
-      label: '用户昵称',
-    },
-    {
-      component: 'Select',
-      componentProps: {
-        options: getDictOptions(DictEnum.SYS_NORMAL_DISABLE),
-      },
-      fieldName: 'status',
-      label: '用户状态',
-    },
-    {
-      component: 'DatePicker',
-      componentProps: {
-        type: 'daterange',
-      },
-      fieldName: 'createTime',
-      label: '创建时间',
-    },
-  ];
-}
-export const useFormSchema: FormSchemaGetter = () => [
+    fieldName: 'createTime',
+    label: '创建时间',
+  },
+];
+export const formSchamas: FormSchemaGetter = () => [
   {
     component: 'Input',
     dependencies: {
@@ -167,9 +163,11 @@ export const useFormSchema: FormSchemaGetter = () => [
     label: '角色',
   },
   {
-    component: 'Textarea',
+    component: 'Input',
     fieldName: 'remark',
-    formItemClass: 'items-baseline',
+    componentProps: {
+      type: 'textarea',
+    },
     label: '备注',
   },
 ];

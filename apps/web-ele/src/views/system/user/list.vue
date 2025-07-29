@@ -5,12 +5,12 @@ import type { VxeTableGridOptions } from '#/adapter/vxe-table';
 import { Page, useVbenModal } from '@vben/common-ui';
 import { preferences } from '@vben/preferences';
 
-import { ElAvatar, ElButton } from 'element-plus';
+import { ElAvatar, ElButton, ElMessageBox } from 'element-plus';
 
 import { useVbenVxeGrid } from '#/adapter/vxe-table';
 import { userList } from '#/api';
 
-import { useColumns, useGridFormSchema } from './data';
+import { girdColumns, searchFormSchemas } from './data';
 import AddForm from './modules/addForm.vue';
 
 const formOptions: VbenFormProps = {
@@ -29,11 +29,11 @@ const formOptions: VbenFormProps = {
     },
   },
   wrapperClass: 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4',
-  schema: useGridFormSchema(),
+  schema: searchFormSchemas(),
 };
 
 const gridOptions: VxeTableGridOptions = {
-  columns: useColumns(),
+  columns: girdColumns,
   proxyConfig: {
     ajax: {
       query: async ({ page }, formValues) => {
@@ -54,16 +54,50 @@ const gridOptions: VxeTableGridOptions = {
   height: 'auto',
 };
 
-const [Grid] = useVbenVxeGrid({
+const [Grid, tableApi] = useVbenVxeGrid({
   formOptions,
   gridOptions,
 });
 const [FormModal, formModalApi] = useVbenModal({
   connectedComponent: AddForm,
 });
-const handleAdd = async () => {
+function confirm(content: string, title = '提示'): Promise<boolean> {
+  return ElMessageBox.confirm(content, title, {
+    confirmButtonText: '确定',
+    cancelButtonText: '取消',
+    type: 'warning',
+  })
+    .then(() => true)
+    .catch(() => false); // 用户取消，返回 false
+}
+/**
+ * 新增
+ */
+async function handleAdd() {
   formModalApi.open();
-};
+}
+/**
+ * 批量删除
+ */
+async function handleMultiDelete() {
+  // const rows = tableApi.grid.getCheckboxRecords();
+  // const ids = rows.map((row: User) => row.userId);
+  // await confirm(`确认删除选中的${ids.length}条记录吗？`);
+  // console.warn('批量删除', ids);
+  const ok = await confirm('确定删除这条数据吗？');
+  if (ok) {
+    // await deleteItem();
+    console.warn('删除成功');
+  } else {
+    console.warn('取消删除');
+  }
+}
+/**
+ * 刷新表格
+ */
+function refreshGrid() {
+  tableApi.query();
+}
 </script>
 
 <template>
@@ -71,7 +105,11 @@ const handleAdd = async () => {
     <Grid table-title="用户列表">
       <template #toolbar-tools>
         <Space>
-          <ElButton v-access:code="['system:user:delete']" type="primary">
+          <ElButton
+            v-access:code="['system:user:delete']"
+            type="primary"
+            @click="handleMultiDelete"
+          >
             {{ $t('pages.common.delete') }}
           </ElButton>
           <ElButton
@@ -87,6 +125,6 @@ const handleAdd = async () => {
         <ElAvatar :src="row.avatar || preferences.app.defaultAvatar" />
       </template>
     </Grid>
-    <FormModal />
+    <FormModal @success="refreshGrid" />
   </Page>
 </template>
