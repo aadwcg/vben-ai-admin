@@ -83,3 +83,14 @@ export type OnActionClickFn<T = Recordable<any>> = (
   params: OnActionClickParams<T>,
 ) => void;
 export type * from '@vben/plugins/vxe-table';
+
+/**
+ * 判断vxe-table的复选框是否选中
+ * @param tableApi api
+ * @returns boolean
+ */
+export function vxeCheckboxChecked(
+  tableApi: ReturnType<typeof useVbenVxeGrid>[1],
+) {
+  return tableApi?.grid?.getCheckboxRecords?.()?.length > 0;
+}

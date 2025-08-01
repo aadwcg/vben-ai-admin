@@ -5,37 +5,21 @@ import { useVbenModal } from '@vben/common-ui';
 import { cloneDeep } from '@vben/utils';
 
 import { useVbenForm } from '#/adapter/form';
-import { findUserInfo, userAdd } from '#/api/system/user';
+import { findUserInfo, userAdd, userUpdate } from '#/api/system/user';
 
-import { formSchamas } from '../data';
+import { useFormSchema } from '../data';
 
 const emit = defineEmits(['success']);
 const isUpdate = ref(false);
 const [Form, formApi] = useVbenForm({
-  schema: formSchamas(),
-  // handleSubmit: onSubmit,
+  schema: useFormSchema(),
   showDefaultActions: false,
 });
+
 const [Modal, modalApi] = useVbenModal({
   fullscreenButton: false,
-  onCancel() {
-    modalApi.close();
-  },
-  onConfirm: async () => {
-    const { valid } = await formApi.validate();
-    if (!valid) {
-      return;
-    }
-    modalApi.setState({ loading: true, confirmLoading: true });
-    try {
-      const data = cloneDeep(await formApi.getValues());
-      await userAdd(data);
-      emit('success');
-      await modalApi.close();
-    } finally {
-      modalApi.setState({ loading: false, confirmLoading: false });
-    }
-  },
+  onCancel: handleCancel,
+  onConfirm: handleConfirm,
   async onOpenChange(isOpen) {
     if (!isOpen) {
       // 关闭时清空岗位选项
@@ -110,6 +94,25 @@ const [Modal, modalApi] = useVbenModal({
     }
   },
 });
+async function handleConfirm() {
+  const { valid } = await formApi.validate();
+  if (!valid) {
+    return;
+  }
+  modalApi.setState({ loading: true, confirmLoading: true });
+  try {
+    const data = cloneDeep(await formApi.getValues());
+    await (isUpdate.value ? userUpdate(data) : userAdd(data));
+    emit('success');
+    await modalApi.close();
+  } finally {
+    modalApi.setState({ loading: false, confirmLoading: false });
+  }
+}
+async function handleCancel() {
+  modalApi.close();
+  await formApi.resetForm();
+}
 </script>
 <template>
   <Modal title="新增用户">
